@@ -28,7 +28,11 @@ def check_model() -> None:
     logger.debug(f"检查模型文件, 类型: {model_type}")
 
     # 根据模型类型确定需要检查的文件
-    if model_type == 'fun_asr_nano':
+    if model_type == 'qwen3_llama_server':
+        # llama-server 独立管理模型文件（-m / --mmproj 指定），这里只检查服务连通性
+        logger.info("模型类型为 qwen3_llama_server：跳过本地模型文件检查（由 llama-server 管理）")
+        return
+    elif model_type == 'fun_asr_nano':
         model_dir = ModelPaths.fun_asr_nano_gguf_dir
         required_files = [
             ModelPaths.fun_asr_nano_gguf_encoder_adaptor,

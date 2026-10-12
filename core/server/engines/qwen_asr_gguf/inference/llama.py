@@ -27,34 +27,41 @@ llama_pos = ctypes.c_int32
 llama_seq_id = ctypes.c_int32
 
 class llama_model_params(ctypes.Structure):
+    # 与 llama.cpp b10621 的 struct llama_model_params 严格对齐
     _fields_ = [
         ("devices", ctypes.POINTER(ctypes.c_void_p)),
         ("tensor_buft_overrides", ctypes.POINTER(ctypes.c_void_p)),
         ("n_gpu_layers", ctypes.c_int32),
         ("split_mode", ctypes.c_int32),
+        ("load_mode", ctypes.c_int32),
         ("main_gpu", ctypes.c_int32),
         ("tensor_split", ctypes.POINTER(ctypes.c_float)),
         ("progress_callback", ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_float, ctypes.c_void_p)),
         ("progress_callback_user_data", ctypes.c_void_p),
         ("kv_overrides", ctypes.POINTER(ctypes.c_void_p)),
         ("vocab_only", ctypes.c_bool),
-        ("use_mmap", ctypes.c_bool),
-        ("use_direct_io", ctypes.c_bool),
-        ("use_mlock", ctypes.c_bool),
         ("check_tensors", ctypes.c_bool),
         ("use_extra_bufts", ctypes.c_bool),
         ("no_host", ctypes.c_bool),
         ("no_alloc", ctypes.c_bool),
+        ("load_mtp", ctypes.c_bool),
     ]
 
 class llama_context_params(ctypes.Structure):
+    # 与 llama.cpp b10621 的 struct llama_context_params 严格对齐
+    # 注意：b10621 在 n_seq_max 后新增 n_rs_seq / n_outputs_max / n_outputs_max_per_seq，
+    # 在 n_threads_batch 后新增 ctx_type，末尾新增 ctx_other；旧版绑定缺失这些字段会导致错位
     _fields_ = [
         ("n_ctx", ctypes.c_uint32),
         ("n_batch", ctypes.c_uint32),
         ("n_ubatch", ctypes.c_uint32),
         ("n_seq_max", ctypes.c_uint32),
+        ("n_rs_seq", ctypes.c_uint32),
+        ("n_outputs_max", ctypes.c_uint32),
+        ("n_outputs_max_per_seq", ctypes.c_uint32),
         ("n_threads", ctypes.c_int32),
         ("n_threads_batch", ctypes.c_int32),
+        ("ctx_type", ctypes.c_int32),
         ("rope_scaling_type", ctypes.c_int32),
         ("pooling_type", ctypes.c_int32),
         ("attention_type", ctypes.c_int32),
@@ -81,6 +88,7 @@ class llama_context_params(ctypes.Structure):
         ("kv_unified", ctypes.c_bool),
         ("samplers", ctypes.POINTER(ctypes.c_void_p)),
         ("n_samplers", ctypes.c_size_t),
+        ("ctx_other", ctypes.c_void_p),
     ]
 
 class llama_sampler_chain_params(ctypes.Structure):

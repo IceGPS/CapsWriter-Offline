@@ -32,12 +32,14 @@ class TrayManager:
         
         # 启用托盘
         enable_min_to_tray(
-            'CapsWriter Client',
+            'voice-ime',
             icon_path,
             exit_callback=self.app.stop,
             more_options=[
                 ('📋 复制结果', self._copy_last_result),
-                ('📁 日记', self._open_diary),
+                ('📁 每日文档', self._open_diary),
+                ('📄 生成今日文档', self._compile_today),
+                ('📝 生成内容总结', self._summarize_today),
                 ('📝 上下文', self._add_context),
                 ('✨ 热词', self._add_hotword),
                 ('🧹 清除记忆', self._clear_memory),
@@ -72,9 +74,14 @@ class TrayManager:
             toast("清除成功：已清除所有角色的对话历史记录", duration=3000, bg="#075077")
 
     def _open_diary(self):
-        """用系统默认方式打开当月日记文件夹回调"""
-        base = self.app.diary.base_path
-        folder = base / time.strftime('%Y') / time.strftime('%m')
+        """用系统默认方式打开当月每日文档文件夹回调（v5.4+：原版 diary 已停用）"""
+        from datetime import datetime
+        try:
+            from ..doc_compiler.paths import daily_doc_path
+        except ImportError:
+            from doc_compiler.paths import daily_doc_path
+        today = datetime.now().strftime('%Y-%m-%d')
+        folder = daily_doc_path(self.app.base_dir, today).parent
         folder.mkdir(parents=True, exist_ok=True)
         if sys.platform == 'win32':
             os.startfile(folder)
@@ -82,6 +89,37 @@ class TrayManager:
             subprocess.Popen(['open', folder])
         else:
             subprocess.Popen(['xdg-open', folder])
+
+    def _compile_today(self):
+        """编译今日文档回调（托盘菜单"📄 生成今日文档"）"""
+        try:
+            from datetime import datetime
+            from ..doc_compiler.compile_day import compile_day
+            today = datetime.now().strftime('%Y-%m-%d')
+            out = compile_day(today, self.app.base_dir)
+            if out:
+                logger.info(f"今日文档已生成: {out}")
+            else:
+                logger.info("今日暂无转写日志，未生成文档")
+        except Exception as e:
+            logger.warning(f"生成今日文档失败: {e}")
+
+    def _summarize_today(self):
+        """内容总结回调（托盘菜单"📝 生成内容总结"，v5）"""
+        try:
+            from datetime import datetime
+            from ..doc_compiler.summarize import summarize_day
+            from ..doc_compiler.llm_client import LLMUnavailable
+            today = datetime.now().strftime('%Y-%m-%d')
+            out = summarize_day(today, self.app.base_dir)
+            if out:
+                logger.info(f"内容总结已生成: {out}")
+            else:
+                logger.info("今日暂无可总结的文档")
+        except LLMUnavailable:
+            logger.warning("LLM 服务启动失败：请检查 config_client.py 中的 llm_server_model 路径是否正确")
+        except Exception as e:
+            logger.warning(f"生成内容总结失败: {e}")
 
     def _add_hotword(self):
         """用系统默认方式打开热词文件回调"""

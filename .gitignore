@@ -188,3 +188,7 @@ release
 *.exe
 
 models/**/*.cfg
+# voice-ime 本地开发文件
+.llama-bin/
+models/Qwen3-ASR-1.7B-HF/
+.venv/

@@ -39,11 +39,18 @@ class EngineFactory:
         from .qwen_asr_gguf.asr_engine import QwenASREngine, ASREngineConfig as QwenASRConfig
         return QwenASREngine, QwenASRConfig, Qwen3ASRGGUFArgs
 
+    @staticmethod
+    def _load_qwen3_llama_server():
+        from .qwen3_llama_server.asr_engine import Qwen3LlamaServerEngine, Qwen3LlamaServerConfig
+        from config_server import Qwen3LlamaServerArgs
+        return Qwen3LlamaServerEngine, Qwen3LlamaServerConfig, Qwen3LlamaServerArgs
+
     _ASR_LOADERS = {
         'sensevoice': _load_sensevoice,
         'paraformer': _load_paraformer,
         'fun_asr_nano': _load_fun_asr_nano,
-        'qwen_asr': _load_qwen_asr
+        'qwen_asr': _load_qwen_asr,
+        'qwen3_llama_server': _load_qwen3_llama_server,
     }
 
     @staticmethod

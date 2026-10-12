@@ -45,6 +45,9 @@ class MicRunner:
         self.app.hotword.start()
         self.app.llm.start()
 
+        # 6. 每日文档自动编译定时器（每天 23:55，有新日志时编译当天）
+        self.app.start_daily_doc_timer()
+
     async def run(self):
         """麦克风模式主入口"""
         

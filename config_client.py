@@ -12,7 +12,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 客户端配置
 class ClientConfig:
     addr = '127.0.0.1'          # Server 地址
-    port = '6016'               # Server 端口
+    port = '6016'               # Server 端口（与原版 CapsWriter 一致，直连现有服务端）
 
     # 快捷键配置列表
     shortcuts = [
@@ -60,6 +60,18 @@ class ClientConfig:
 
     llm_enabled = True          # 是否启用 LLM 润色功能，需要配置 LLM/ 目录下的角色文件
     llm_stop_key = 'esc'        # 中断 LLM 输出的快捷键
+
+    # ---- v5.1 内容总结：本地大模型（按需启停，不常驻内存）----
+    # 总结是低频任务（每天一次），点托盘"📝 生成内容总结"时自动启动
+    # llama-server，用完即关闭；若服务已在跑（手动起了 start_llm_server.bat）
+    # 则直接用，用完不关。
+    llm_server_exe = 'llama-server/llama-server.exe'  # 相对程序根目录
+    llm_server_model = r'C:\AI\models\gguf\lmstudio-community\Qwen3.8-27B-GGUF\Qwen3.8-27B-Q4_K_M.gguf'
+    llm_server_alias = 'qwen'
+    llm_server_port = 8081
+    llm_server_ctx = 32768
+    llm_server_ngl = 99
+    llm_server_start_timeout = 600  # 等模型加载的最长秒数（27B 约 1~2 分钟）
 
     enable_tray = True          # 客户端默认启用托盘图标功能
 

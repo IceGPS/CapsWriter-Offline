@@ -31,7 +31,7 @@ from .udp.udp_control import UDPController
 from .hotword.manager import HotwordManager
 from .llm.llm_handler import LLMHandler
 from .output.text_output import TextOutput
-from .diary.diary_writer import DiaryWriter
+from .doc_compiler.log import DailyLogger
 from core.tools.empty_working_set import empty_current_working_set
 from platform import system
 
@@ -66,7 +66,10 @@ class CapsWriterClient:
         self.llm = LLMHandler(app=self)
         
         self.output = TextOutput()
-        self.diary = DiaryWriter(base_path=self.base_dir)
+
+        # voice-ime 日志层：记录每次转写的 {ts, text, audio} 三元组
+        # v5.4+：原版 diary 日记不再写入，docs/daily 每日文档已替代它
+        self.daily_logger = DailyLogger(base_dir=self.base_dir)
 
         # 初始化各管理器
         self.ws = WebSocketManager(self)
@@ -113,6 +116,43 @@ class CapsWriterClient:
         logger.info("资源释放完成")
         console.print('[green4]再见！')
 
+
+    def start_daily_doc_timer(self):
+        """
+        启动每日文档自动编译定时器：每天 23:55 检查当天日志，
+        仅当有新日志时编译（幂等，重复运行无副作用）。
+        """
+        async def _scheduler():
+            from datetime import datetime as _dt, timedelta as _td
+            from .doc_compiler.compile_day import compile_day, needs_compile
+            while True:
+                now = _dt.now()
+                target = now.replace(hour=23, minute=55, second=0, microsecond=0)
+                if target <= now:
+                    target += _td(days=1)
+                await asyncio.sleep((target - now).total_seconds())
+                try:
+                    today = _dt.now().strftime('%Y-%m-%d')
+                    if needs_compile(today, self.base_dir):
+                        out = compile_day(today, self.base_dir)
+                        logger.info(f"已自动编译今日文档: {out}")
+                    # v5: 编译之后尝试自动生成内容总结；LLM 不可达则静默跳过
+                    try:
+                        from .doc_compiler.summarize import summarize_day, needs_summary
+                        from .doc_compiler.llm_client import LLMUnavailable
+                        if needs_summary(today, self.base_dir):
+                            sout = summarize_day(today, self.base_dir)
+                            if sout:
+                                logger.info(f"已自动生成内容总结: {sout}")
+                    except LLMUnavailable:
+                        logger.info("LLM 服务不可达，跳过自动内容总结")
+                    except Exception as e2:
+                        logger.warning(f"自动内容总结失败: {e2}")
+                except Exception as e:
+                    logger.warning(f"自动编译今日文档失败: {e}")
+
+        self.loop.create_task(_scheduler())
+        logger.info("每日文档自动编译定时器已启动（每天 23:55，有新日志时编译）")
 
     def start(self):
         """

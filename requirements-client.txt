@@ -28,6 +28,7 @@ rapidfuzz
 pystray
 Pillow
 tkhtmlview
+lameenc  # MP3 录音编码（v5.2+，替代 WAV）
 
 # build
 pyinstaller

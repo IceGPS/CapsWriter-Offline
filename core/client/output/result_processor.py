@@ -29,7 +29,6 @@ if TYPE_CHECKING:
     from core.client.state import ClientState
     from core.client.app import CapsWriterClient
     from core.client.hotword.manager import HotwordManager
-    from core.client.diary.diary_writer import DiaryWriter
 
 
 
@@ -91,11 +90,6 @@ class ResultProcessor:
     def output(self) -> TextOutput:
         """快捷访问文本输出器"""
         return self.app.output
-
-    @property
-    def diary(self) -> DiaryWriter:
-        """快捷访问日记写入器"""
-        return self.app.diary
 
     def request_exit(self):
         """请求退出处理循环（线程安全）"""
@@ -283,16 +277,28 @@ class ResultProcessor:
 
         # 保存录音与写入 md 文件
         file_audio = None
+        # 总是取出录音文件（即使不保存音频，也要交给日志层，保证录音不丢）
+        audio_src = self.state.pop_audio_file(message.task_id)
         if Config.save_audio:
             # 重命名音频文件
-            file_path = self.state.pop_audio_file(message.task_id)
-            if file_path:
+            if audio_src:
                 file_manager = AudioFileManager()
-                file_manager.file_path = file_path
+                file_manager.file_path = audio_src
                 file_audio = file_manager.rename(text, message.time_start)
 
-            # 写入日记
-            self.diary.write(text, message.time_start, file_audio)
+        # voice-ime 日志层：记录转写三元组（原始文本，含语气词）
+        # v5.4+：原版 diary 日记不再双写，docs/daily 每日文档已替代它
+        try:
+            self.app.daily_logger.log_transcript(
+                time_start=message.time_start,
+                text=original_text,
+                audio_path=file_audio or audio_src,
+                status='ok' if original_text and original_text.strip() else 'empty',
+                dur_ms=(int((message.time_complete - message.time_start) * 1000)
+                        if message.time_complete and message.time_start else None),
+            )
+        except Exception as e:
+            logger.warning(f"日志层记录失败: {e}")
 
         # LLM 结果显示和保存
         if Config.llm_enabled and llm_result and llm_result.processed:

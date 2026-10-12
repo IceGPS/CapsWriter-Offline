@@ -13,8 +13,10 @@ class ServerConfig:
     addr = '0.0.0.0'
     port = '6016'
 
-    # 语音模型选择：'qwen_asr', 'fun_asr_nano', 'sensevoice', 'paraformer'
-    model_type = 'qwen_asr'
+    # 语音模型选择：'qwen_asr', 'qwen3_llama_server', 'fun_asr_nano', 'sensevoice', 'paraformer'
+    #   qwen_asr:            原生 ctypes 引擎（需 llama.cpp 动态库，见 inference/bin/）
+    #   qwen3_llama_server:  经本地 llama-server HTTP 接口调用（推荐，需先启动 llama-server）
+    model_type = 'qwen3_llama_server'
 
     format_num = True       # 输出时是否将中文数字转为阿拉伯数字
     format_spell = True     # 输出时是否调整中英之间的空格
@@ -157,9 +159,18 @@ class Qwen3ASRGGUFArgs:
     verbose = False
 
 
+class Qwen3LlamaServerArgs:
+    """Qwen3-ASR llama-server HTTP 引擎参数配置"""
+
+    server_url = 'http://127.0.0.1:8080'  # 本地 llama-server 地址
+    model = 'Qwen3-ASR-1.7B'               # 传给 /v1/audio/transcriptions 的 model 字段
+    language = 'zh'                        # 转写语言
+    timeout = 300.0                        # 单次请求超时（秒）
+    verbose = False
+
+
 class ForceAlignerGGUFArgs:
     """Force-Aligner-GGUF 模型参数配置"""
-
     # 模型路径
     model_dir = ModelPaths.force_aligner_gguf_dir.as_posix()
     encoder_frontend_fn = ModelPaths.force_aligner_gguf_encoder_frontend.name

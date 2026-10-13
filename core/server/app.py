@@ -17,6 +17,7 @@ from .worker.process_manager import ProcessManager
 from .connection.server_manager import SocketManager
 from .ui.tray_manager import TrayManager
 from . import logger
+from .mdns_publisher import start_mdns, stop_mdns
 
 class CapsWriterServer:
     """
@@ -70,6 +71,9 @@ class CapsWriterServer:
         # 1. 关闭 WebSocket 服务（立即释放端口）
         self.socket_manager.stop()
 
+        # 1.5 注销 mDNS 服务
+        stop_mdns()
+
         # 2. 终止识别子进程
         self.process_manager.stop()
 
@@ -102,6 +106,13 @@ class CapsWriterServer:
 
         # 拉起识别子进程
         self.process_manager.start()
+
+        # 发布 mDNS 服务（供 Android 端自动发现）
+        try:
+            port = int(Config.port)
+        except Exception:
+            port = 6016
+        start_mdns(port)
         
         # 开启网络服务监听 (接管当前线程直至退出)
         try:

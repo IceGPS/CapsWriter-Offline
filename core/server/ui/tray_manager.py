@@ -34,9 +34,41 @@ class TrayManager:
         enable_min_to_tray(
             'CapsWriter Server',
             icon_path,
-            exit_callback=self._request_exit
+            exit_callback=self._request_exit,
+            more_options=[
+                # (名称, 回调, checked_fn)：可勾选的剪贴板共享总开关（默认关）
+                ('📋 剪贴板共享', self._toggle_clipsync,
+                 lambda item: self.app.clipsync.is_enabled()),
+            ],
+            menu_provider=self._clipsync_menu,
         )
         logger.info("托盘图标已启用")
+
+    def _toggle_clipsync(self, icon=None, item=None):
+        """托盘菜单：切换剪贴板共享开关"""
+        clipsync = self.app.clipsync
+        clipsync.set_enabled(not clipsync.is_enabled())
+
+    def _clipsync_menu(self):
+        """动态菜单：已配对设备子菜单（每设备一个取消配对项）。"""
+        try:
+            from pystray import Menu, MenuItem as item
+        except ImportError:
+            return []
+        devices = self.app.clipsync.paired_devices()
+        if not devices:
+            sub = Menu(item('（无已配对设备）', None, enabled=False))
+        else:
+            sub = Menu(*[
+                item(f'❌ {name}', self._make_unpair_cb(device_id))
+                for device_id, name in devices
+            ])
+        return [item('📱 已配对设备', sub)]
+
+    def _make_unpair_cb(self, device_id: str):
+        def _cb(icon=None, item=None):
+            self.app.clipsync.unpair_device(device_id)
+        return _cb
 
     def _request_exit(self, icon=None, item=None):
         """托盘图标引用的退出回调"""

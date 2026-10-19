@@ -14,5 +14,9 @@ pypinyin
 pystray
 Pillow
 
+# clipboard sync (v1): AES-GCM + Windows clipboard
+pycryptodome
+pyclip
+
 markdown
 tkhtmlview

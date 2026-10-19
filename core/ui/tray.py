@@ -208,40 +208,62 @@ def _create_icon(icon_path: Optional[str] = None):
 
 class _TraySystem:
     """托盘系统内部类"""
-    
-    def __init__(self, name: Optional[str] = None, icon_path: Optional[str] = None, more_options: list = None):
+
+    def __init__(self, name: Optional[str] = None, icon_path: Optional[str] = None,
+                 more_options: list = None, menu_provider=None):
         # 延迟导入 pystray
         import pystray
-        from pystray import MenuItem as item
-        
+
         self.hwnd = _get_console_hwnd()
         self.should_exit = False
         self.title = name if name else (os.path.basename(sys.argv[0]) or "Console App")
+        # more_options 条目格式：(名称, 回调) 或 (名称, 回调, checked_fn)；
+        # checked_fn(item)->bool，用于可勾选菜单项。
+        self._more_options = more_options or []
+        # menu_provider：() -> [MenuItem, ...]，动态菜单（如已配对设备列表），
+        # 每次构建菜单时调用。
+        self._menu_provider = menu_provider
 
         # 禁用关闭按钮
         if self.hwnd:
             _disable_close_button(self.hwnd)
 
-        # 定义菜单
+        self.icon = pystray.Icon(
+            "console_tray",
+            _create_icon(icon_path),
+            title=f"{self.title}",
+            menu=self.build_menu()
+        )
+
+    def build_menu(self):
+        """构建完整托盘菜单（初始化与刷新时共用）。"""
+        from pystray import MenuItem as item
+
         menu_items = [
             item(f"{self.title}", lambda: None, enabled=False),
             item('👁️ 显示/隐藏', self.toggle_window, default=True),
         ]
 
         # 添加额外选项
-        if more_options:
-            for opt_name, opt_func in more_options:
+        for opt in self._more_options:
+            if len(opt) >= 3:
+                opt_name, opt_func, opt_checked = opt[0], opt[1], opt[2]
+                menu_items.append(item(opt_name, opt_func, checked=opt_checked))
+            else:
+                opt_name, opt_func = opt[0], opt[1]
                 menu_items.append(item(opt_name, opt_func))
+
+        # 动态菜单（如剪贴板同步的已配对设备子菜单）
+        if self._menu_provider:
+            try:
+                extra = self._menu_provider() or []
+                menu_items.extend(extra)
+            except Exception as e:
+                logger.warning(f"托盘动态菜单构建失败: {e}")
 
         menu_items.append(item('🔄 重启', self.on_restart))
         menu_items.append(item('❌ 退出', self.on_exit))
-
-        self.icon = pystray.Icon(
-            "console_tray",
-            _create_icon(icon_path),
-            title=f"{self.title}",
-            menu=tuple(menu_items)
-        )
+        return tuple(menu_items)
 
     def toggle_window(self) -> None:
         """切换窗口显示状态"""
@@ -333,7 +355,9 @@ class _TraySystem:
         self.toggle_window()
 
 
-def enable_min_to_tray(name: Optional[str] = None, icon_path: Optional[str] = None, exit_callback=None, more_options: list = None) -> None:
+def enable_min_to_tray(name: Optional[str] = None, icon_path: Optional[str] = None,
+                      exit_callback=None, more_options: list = None,
+                      menu_provider=None) -> None:
     """
     启用最小化到托盘功能
 
@@ -344,7 +368,11 @@ def enable_min_to_tray(name: Optional[str] = None, icon_path: Optional[str] = No
         name: 托盘图标显示的名称，默认使用程序名称
         icon_path: 图标文件路径，默认动态生成
         exit_callback: 退出回调函数，当用户点击托盘退出菜单时调用
-        more_options: 额外菜单项列表，格式为 [(名称, 回调函数), ...]
+        more_options: 额外菜单项列表，格式为 [(名称, 回调函数), ...]，
+            也支持 (名称, 回调函数, checked_fn) 的可勾选条目，
+            checked_fn(item)->bool。
+        menu_provider: 可选，() -> [pystray MenuItem, ...]，动态菜单构建器
+            （如已配对设备子菜单），每次构建/刷新菜单时调用。
     """
     global _tray_instance
 
@@ -373,8 +401,26 @@ def enable_min_to_tray(name: Optional[str] = None, icon_path: Optional[str] = No
         if not _get_console_hwnd():
             return  # 没有控制台窗口
 
-        _tray_instance = _TraySystem(name, icon_path, more_options)
+        _tray_instance = _TraySystem(name, icon_path, more_options, menu_provider)
         _tray_instance.start()
+
+
+def refresh_tray_menu() -> bool:
+    """
+    重建托盘菜单（例如配对状态变化后刷新动态菜单项）。
+
+    Returns:
+        是否成功刷新（托盘未启用时返回 False）
+    """
+    inst = _tray_instance
+    if inst is None or getattr(inst, 'icon', None) is None:
+        return False
+    try:
+        inst.icon.menu = inst.build_menu()
+        return True
+    except Exception as e:
+        logger.warning(f"刷新托盘菜单失败: {e}")
+        return False
 
 
 

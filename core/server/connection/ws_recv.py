@@ -181,6 +181,18 @@ async def ws_recv(websocket, app) -> None:
             # 使用协议类解析消息
             try:
                 data = json.loads(raw_message)
+            except Exception:
+                logger.error("消息 JSON 解析失败，跳过")
+                continue
+            # 剪贴板同步消息分流（设计文档第 7 节）：pair_req / clip / unpair
+            if isinstance(data, dict) and data.get('type') in ('pair_req', 'clip', 'unpair'):
+                clipsync = getattr(app, 'clipsync', None)
+                if clipsync is not None:
+                    await clipsync.handle_ws_message(websocket, data)
+                else:
+                    logger.warning("收到剪贴板同步消息，但 clipsync 未初始化，已忽略")
+                continue
+            try:
                 msg = AudioMessage.from_dict(data)
                 # 处理音频数据
                 await message_handler(websocket, msg, cache, app)
@@ -206,6 +218,14 @@ async def ws_recv(websocket, app) -> None:
         sockets.pop(socket_id, None)
         if socket_id in sockets_id:
             sockets_id.remove(socket_id)
+
+        # 剪贴板同步：清除该连接的设备绑定
+        clipsync = getattr(app, 'clipsync', None)
+        if clipsync is not None:
+            try:
+                clipsync.on_socket_closed(socket_id)
+            except Exception:
+                pass
 
         console.print(f'[bold red]客户端已断开: {remote[0]}:{remote[1]}[/bold red]\n')
 

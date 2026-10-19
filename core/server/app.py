@@ -16,6 +16,7 @@ from core.tools.signal_handler import register_signal
 from .worker.process_manager import ProcessManager
 from .connection.server_manager import SocketManager
 from .ui.tray_manager import TrayManager
+from .clipsync import ClipSyncService
 from . import logger
 from .mdns_publisher import start_mdns, stop_mdns
 
@@ -41,6 +42,7 @@ class CapsWriterServer:
         self.process_manager = ProcessManager(self)
         self.socket_manager = SocketManager(self)
         self.tray_manager = TrayManager(self)
+        self.clipsync = ClipSyncService(self)
 
         self.version = __version__
         self.is_alive = False
@@ -70,6 +72,12 @@ class CapsWriterServer:
 
         # 1. 关闭 WebSocket 服务（立即释放端口）
         self.socket_manager.stop()
+
+        # 1.2 停止剪贴板同步（监听线程）
+        try:
+            self.clipsync.stop()
+        except Exception:
+            pass
 
         # 1.5 注销 mDNS 服务
         stop_mdns()
@@ -107,12 +115,19 @@ class CapsWriterServer:
         # 拉起识别子进程
         self.process_manager.start()
 
-        # 发布 mDNS 服务（供 Android 端自动发现）
+        # 发布 mDNS 服务（供 Android 端自动发现；剪贴板同步启用时带 clip TXT）
         try:
             port = int(Config.port)
         except Exception:
             port = 6016
-        start_mdns(port)
+        start_mdns(port, extra_props=self.clipsync.get_mdns_props())
+
+        # 启动剪贴板同步服务（开关关闭时仅初始化，不监听）
+        try:
+            self.clipsync.start()
+        except Exception:
+            logger.warning("剪贴板同步服务启动失败", exc_info=True)
+
         
         # 开启网络服务监听 (接管当前线程直至退出)
         try:

@@ -4,7 +4,8 @@ mDNS 服务发布：让 Android 端自动发现局域网内的 voice-ime PC 服�
 
 服务类型：_voiceime._tcp.local.
 服务名：VoiceIME-<电脑名>
-TXT 记录：model=<模型名>
+TXT 记录：model=<模型名>；剪贴板同步启用时追加 clip=1、id=<本机UUID>、name=<电脑名>
+（设计文档第 7.1 节）。
 """
 import socket
 import logging
@@ -29,8 +30,16 @@ def get_local_ip():
         return "127.0.0.1"
 
 
-def start_mdns(port: int, model: str = "") -> bool:
-    """发布 mDNS 服务，返回是否成功"""
+def start_mdns(port: int, model: str = "", extra_props: dict | None = None) -> bool:
+    """
+    发布 mDNS 服务，返回是否成功。
+
+    Args:
+        port: 服务端口
+        model: 语音模型名（写入 TXT 的 model）
+        extra_props: 追加的 TXT 记录（键值都会转为 str），如剪贴板同步的
+            {"clip": "1", "id": <uuid>, "name": <电脑名>}
+    """
     global _zeroconf, _service_info
     try:
         from zeroconf import ServiceInfo, Zeroconf
@@ -45,6 +54,9 @@ def start_mdns(port: int, model: str = "") -> bool:
         props = {}
         if model:
             props["model"] = model
+        if extra_props:
+            for k, v in extra_props.items():
+                props[str(k)] = str(v)
 
         _service_info = ServiceInfo(
             SERVICE_TYPE,
@@ -55,7 +67,7 @@ def start_mdns(port: int, model: str = "") -> bool:
         )
         _zeroconf = Zeroconf()
         _zeroconf.register_service(_service_info)
-        logger.info(f"[mDNS] 已发布服务: {service_name} ({ip}:{port})")
+        logger.info(f"[mDNS] 已发布服务: {service_name} ({ip}:{port}) TXT={props}")
         return True
     except Exception as e:
         logger.warning(f"[mDNS] 发布失败: {e}")

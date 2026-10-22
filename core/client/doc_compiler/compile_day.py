@@ -33,11 +33,13 @@ from pathlib import Path
 try:
     # 包模式：python -m core.client.doc_compiler.compile_day
     from .clean import split_sentences, clean_text
+    from .corrections import build_correction_stats_md
     from .log import DailyLogger  # noqa: F401（供外部复用，保持包内一致）
     from .paths import daily_doc_path, daily_log_path
 except ImportError:
     # 脚本模式：python core/client/doc_compiler/compile_day.py
     from clean import split_sentences, clean_text
+    from corrections import build_correction_stats_md
     from log import DailyLogger  # noqa: F401
     from paths import daily_doc_path, daily_log_path
 
@@ -231,6 +233,12 @@ def compile_day(date_str: str, base_dir: str | Path | None = None) -> Path | Non
         lines.append(head)
         lines.append("")
         lines.append(body)
+        lines.append("")
+
+    # 语音纠错统计（确定性生成，无事件则不加；纠错条目不进正文，见 clean_entries）
+    stats_md = build_correction_stats_md(entries)
+    if stats_md:
+        lines.append(stats_md.rstrip("\n"))
         lines.append("")
 
     content = "\n".join(lines).rstrip("\n") + "\n"

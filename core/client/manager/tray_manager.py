@@ -96,7 +96,7 @@ class TrayManager:
             from datetime import datetime
             from ..doc_compiler.compile_day import compile_day
             today = datetime.now().strftime('%Y-%m-%d')
-            out = compile_day(today, self.app.base_dir)
+            out = compile_day(today, self.app.base_dir, Config.phone_log_dirs)
             if out:
                 logger.info(f"今日文档已生成: {out}")
             else:

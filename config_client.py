@@ -73,6 +73,12 @@ class ClientConfig:
     llm_server_ngl = 99
     llm_server_start_timeout = 600  # 等模型加载的最长秒数（27B 约 1~2 分钟）
 
+    # ---- 手机端日志合并（v5.5 仓库化，2026-10-22）：Syncthing 把手机
+    # /sdcard/VoiceIME 同步到 PC 后，每日文档编译器会同时读取这些目录里的
+    # logs/YYYY/MM/*.jsonl，与本机日志按时间合并成同一天的文档（含语音
+    # 纠错统计）。留空则只读本机日志。例：[r'C:\Users\你的用户名\VoiceIME']
+    phone_log_dirs = []
+
     enable_tray = True          # 客户端默认启用托盘图标功能
 
     # 日志配置

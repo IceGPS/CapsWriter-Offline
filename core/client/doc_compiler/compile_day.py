@@ -56,25 +56,47 @@ def _default_base_dir() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def load_entries(date_str: str, base_dir: Path) -> list[dict]:
-    """读取当天 jsonl，按时间排序。"""
-    p = daily_log_path(base_dir, date_str)
-    if not p.exists():
-        return []
+def _parse_dt(ts: str) -> datetime | None:
+    """解析 ts；无时区信息时按本地时区解释，避免混源（手机旧版 v1 日志/PC）
+    排序时 naive 与 aware 比较崩溃。"""
+    try:
+        dt = datetime.fromisoformat(ts or "")
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.astimezone()
+    return dt
+
+
+def load_entries(date_str: str, base_dir: Path, extra_dirs: list | None = None) -> list[dict]:
+    """读取当天 jsonl，按时间排序。
+
+    extra_dirs：附加数据源根目录列表（与 base_dir 同样的 logs/YYYY/MM/*.jsonl
+    布局），例如 Syncthing 从手机同步过来的 VoiceIME 目录。条目只在内存中
+    按时间合并排序，不把多个 jsonl 物理合并（避免 Syncthing 同步冲突）。
+    （v5.5 合并补丁的仓库化实现，2026-10-22 审计后落地：当年补丁针对的
+    "手机无 status / ts 无时区"已由 Android schema v2 消解，此处保留
+    extra_dirs 机制与 _parse_dt 对旧 v1 日志的防御。）
+    """
+    dirs = [Path(base_dir)] + [Path(d) for d in (extra_dirs or []) if d]
     entries: list[dict] = []
-    for line in p.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
+    for d in dirs:
+        p = daily_log_path(d, date_str)
+        if not p.exists():
             continue
-        try:
-            e = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        try:
-            e["_dt"] = datetime.fromisoformat(e.get("ts", ""))
-        except ValueError:
-            continue
-        entries.append(e)
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            dt = _parse_dt(e.get("ts", ""))
+            if dt is None:
+                continue
+            e["_dt"] = dt
+            entries.append(e)
     entries.sort(key=lambda e: e["_dt"])
     return entries
 
@@ -84,7 +106,8 @@ def clean_entries(entries: list[dict]) -> list[dict]:
     prev_last = ""
     for e in entries:
         raw = e.get("text") or ""
-        if e.get("status") != "ok" or not raw.strip():
+        # status 缺失视为 ok（兼容 Android 旧版 v1 日志）；纠错事件无 text，仍会被空文本规则排除
+        if e.get("status", "ok") != "ok" or not raw.strip():
             e["_clean"] = ""
         else:
             e["_clean"] = clean_text(raw, prev_last)
@@ -196,15 +219,18 @@ def extract_manual_sections(md_text: str) -> dict[str, str]:
     return sections
 
 
-def compile_day(date_str: str, base_dir: str | Path | None = None) -> Path | None:
+def compile_day(date_str: str, base_dir: str | Path | None = None,
+                extra_dirs: list | None = None) -> Path | None:
     """
     编译某一天的文档。
+
+    extra_dirs：附加日志数据源（如手机 Syncthing 同步目录），与本机日志合并编译。
 
     Returns:
         生成的文档路径；当天无日志时返回 None。
     """
     base = Path(base_dir) if base_dir else _default_base_dir()
-    entries = load_entries(date_str, base)
+    entries = load_entries(date_str, base, extra_dirs)
     if not entries:
         return None
 
@@ -259,16 +285,24 @@ def _record_compile(date_str: str, base: Path, count: int) -> None:
     p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
-def needs_compile(date_str: str, base_dir: str | Path | None = None) -> bool:
-    """当天日志条数是否多于上次编译时（供定时器判断"有新日志"）。"""
+def needs_compile(date_str: str, base_dir: str | Path | None = None,
+                  extra_dirs: list | None = None) -> bool:
+    """当天日志条数是否多于上次编译时（供定时器判断"有新日志"）。
+
+    多数据源时统计所有来源的条数之和（与 _record_compile 记录的
+    len(entries) 口径一致，entries 已含附加来源）。
+    """
     base = Path(base_dir) if base_dir else _default_base_dir()
-    lp = daily_log_path(base, date_str)
-    if not lp.exists():
-        return False
-    try:
-        with open(lp, encoding="utf-8") as f:
-            count = sum(1 for line in f if line.strip())
-    except OSError:
+    dirs = [base] + [Path(d) for d in (extra_dirs or []) if d]
+    count = 0
+    for d in dirs:
+        lp = daily_log_path(d, date_str)
+        try:
+            with open(lp, encoding="utf-8") as f:
+                count += sum(1 for line in f if line.strip())
+        except OSError:
+            continue
+    if count == 0:
         return False
     try:
         data = json.loads((base / "logs" / LAST_COMPILE_FILE).read_text(encoding="utf-8"))
@@ -285,8 +319,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("date", nargs="?", default=datetime.now().strftime("%Y-%m-%d"),
                     help="日期 YYYY-MM-DD，默认今天")
     ap.add_argument("--base-dir", default=None, help="程序根目录，默认自动推导")
+    ap.add_argument("--extra-dir", action="append", default=[], dest="extra_dirs",
+                    help="附加日志数据源根目录（如手机 Syncthing 同步目录），可重复指定")
     args = ap.parse_args(argv)
-    out = compile_day(args.date, args.base_dir)
+    out = compile_day(args.date, args.base_dir, args.extra_dirs)
     if out:
         print(f"done: {out}")
     else:

@@ -133,8 +133,8 @@ class CapsWriterClient:
                 await asyncio.sleep((target - now).total_seconds())
                 try:
                     today = _dt.now().strftime('%Y-%m-%d')
-                    if needs_compile(today, self.base_dir):
-                        out = compile_day(today, self.base_dir)
+                    if needs_compile(today, self.base_dir, Config.phone_log_dirs):
+                        out = compile_day(today, self.base_dir, Config.phone_log_dirs)
                         logger.info(f"已自动编译今日文档: {out}")
                     # v5: 编译之后尝试自动生成内容总结；LLM 不可达则静默跳过
                     try:
